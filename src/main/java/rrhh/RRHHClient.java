@@ -17,11 +17,12 @@ public class RRHHClient {
             System.out.println("2. Actualizar Empleado");
             System.out.println("3. Consultar Empleado");
             System.out.println("4. Borrar Empleado (Genera Histórico)");
-            System.out.println("5. Salir");
+            System.out.println("5. Actualizar Localización de un Departamento");
+            System.out.println("6. Salir");
             System.out.print("Seleccione opción: ");
 
             String opcion = scanner.nextLine();
-            if (opcion.equals("5")) break;
+            if (opcion.equals("6")) break;
 
             String mensajeEnviar = "";
 
@@ -40,6 +41,9 @@ public class RRHHClient {
                     case "4": // Delete
                         System.out.print("Ingrese ID a borrar: ");
                         mensajeEnviar = "DELETE;" + scanner.nextLine();
+                        break;
+                    case "5": // Update Localización Dpto
+                        mensajeEnviar = construirMensajeUpdateLocalizacionDepto(scanner);
                         break;
                     default:
                         System.out.println("Opción incorrecta.");
@@ -107,6 +111,12 @@ public class RRHHClient {
                 sueldo + ";" + comision + ";" + cargo + ";" + gerente + ";" + depto;
     }
 
+    private static String construirMensajeUpdateLocalizacionDepto(Scanner sc) {
 
+        System.out.print("ID del Departamento: ");String id = sc.nextLine();
+        System.out.print("Nueva Dirección: ");String direccion = sc.nextLine();
+        System.out.print("Nuevo ID de Ciudad: ");String ciudad = sc.nextLine();
+        return "UPDATELOCDEPT;" + direccion + ";" + ciudad + ";" + id;
+    }
 
 }

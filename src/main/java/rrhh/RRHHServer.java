@@ -59,6 +59,9 @@ public class RRHHServer {
                     case "DELETE":
                         respuesta = borrarEmpleadoTransaccional(con, partes[1]);
                         break;
+                    case "UPDATELOCDEPT":
+                        respuesta =  actualizarLocalizacionDepto(con, partes);
+                        break;
                     default:
                         respuesta = "Acción no válida";
                 }
@@ -77,7 +80,8 @@ public class RRHHServer {
                     "empl_sueldo, empl_comision, empl_cargo_ID, empl_gerente_ID, empl_dpto_ID) " +
                     "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
 
-            try (PreparedStatement pstmt = con.prepareStatement(sql)) {
+            try (PreparedStatement pstmt = con.prepareStatement(sql, PreparedStatement.RETURN_GENERATED_KEYS)) {
+
                 pstmt.setString(1, datos[1]); // Nombre
                 pstmt.setString(2, datos[2]); // Apellido
                 pstmt.setString(3, datos[3]); // Email
@@ -95,8 +99,22 @@ public class RRHHServer {
 
                 pstmt.setInt(9, Integer.parseInt(datos[9])); // Departamento (FK)
 
-                pstmt.executeUpdate();
-                return "Exitoso: Empleado insertado correctamente.";
+                int rows = pstmt.executeUpdate();
+
+                if (rows == 0) {
+                    return "Error: No se insertó el empleado.";
+                }
+
+                // Obtener el ID generado
+                try (ResultSet rs = pstmt.getGeneratedKeys()) {
+                    if (rs.next()) {
+                        int nuevoID = rs.getInt(1);
+                        return "Exitoso: Empleado insertado con ID = " + nuevoID;
+                    } else {
+                        return "Insertado, pero no se pudo obtener el ID generado.";
+                    }
+                }
+
             } catch (SQLException e) {
                 return "Error SQL: " + e.getMessage();
             }
@@ -142,11 +160,18 @@ public class RRHHServer {
             }
         }
 
+
         // Consultar un empleado
         private String consultarEmpleado(Connection con, String idStr) {
-            String sql = "SELECT empl_ID, empl_nombre, empl_apellido, empl_email, empl_fecha_nac, " +
-                    "empl_sueldo, empl_comision, empl_cargo_ID, empl_gerente_ID, empl_dpto_ID " +
-                    "FROM EMPLEADOS WHERE empl_ID = ?";
+
+            String sql = "SELECT e.empl_ID, e.empl_nombre, e.empl_apellido, e.empl_email, e.empl_fecha_nac, " +
+                    "e.empl_sueldo, e.empl_comision, e.empl_cargo_ID, e.empl_gerente_ID, e.empl_dpto_ID, " +
+                    "l.localiz_direccion, c.ciud_nombre, c.ciud_ID " +   // ← espacio agregado aquí
+                    "FROM EMPLEADOS e " +
+                    "JOIN DEPARTAMENTOS d ON e.empl_dpto_ID = d.dpto_ID " +
+                    "JOIN LOCALIZACIONES l ON d.dpto_localiz_ID = l.localiz_ID " +
+                    "JOIN CIUDADES c ON l.localiz_ciudad_ID = c.ciud_ID " +
+                    "WHERE e.empl_ID = ?";
 
             try (PreparedStatement pstmt = con.prepareStatement(sql)) {
 
@@ -160,7 +185,8 @@ public class RRHHServer {
 
                     return String.format(
                             "ID: %d\nNombre: %s\nApellido: %s\nEmail: %s\nFecha Nac: %s\n" +
-                                    "Sueldo: %.2f\nComisión: %.2f\nCargo ID: %d\nGerente ID: %s\nDepartamento ID: %d",
+                                    "Sueldo: %.2f\nComisión: %.2f\nCargo ID: %d\nGerente ID: %s\nDepartamento ID: %d\n" +
+                                    "Dirección: %s\nCiudad: %s (ID: %d)",
                             rs.getInt("empl_ID"),
                             rs.getString("empl_nombre"),
                             rs.getString("empl_apellido"),
@@ -170,7 +196,10 @@ public class RRHHServer {
                             rs.getDouble("empl_comision"),
                             rs.getInt("empl_cargo_ID"),
                             gerente,
-                            rs.getInt("empl_dpto_ID")
+                            rs.getInt("empl_dpto_ID"),
+                            rs.getString("localiz_direccion"),
+                            rs.getString("ciud_nombre"),
+                            rs.getInt("ciud_ID")
                     );
 
                 } else {
@@ -182,7 +211,7 @@ public class RRHHServer {
             }
         }
 
-        // d. Borrar empleado pero con transacción, o sea histórico
+        // Borrar empleado pero con transacción, o sea histórico
         private String borrarEmpleadoTransaccional(Connection con, String idStr) {
             PreparedStatement selectStmt = null;
             PreparedStatement insertHistStmt = null;
@@ -190,10 +219,10 @@ public class RRHHServer {
             int id = Integer.parseInt(idStr);
 
             try {
-                // 1. Iniciar Transacción (Desactivar AutoCommit)
+                // Iniciar Transacción (Desactivar AutoCommit)
                 con.setAutoCommit(false);
 
-                // 2. Obtener datos actuales para mover al histórico
+                // Obtener datos actuales para mover al histórico
                 String sqlSelect = "SELECT empl_cargo_ID, empl_dpto_ID FROM EMPLEADOS WHERE empl_ID = ?";
                 selectStmt = con.prepareStatement(sqlSelect);
                 selectStmt.setInt(1, id);
@@ -244,5 +273,29 @@ public class RRHHServer {
                 } catch (SQLException e) { e.printStackTrace(); }
             }
         }
+
+        // Actualizar la dirección y ciudad de un departamento
+        private String actualizarLocalizacionDepto(Connection con, String[] datos) {
+
+            String sql = "UPDATE LOCALIZACIONES l " +
+                    "JOIN DEPARTAMENTOS d ON l.localiz_ID = d.dpto_localiz_ID " +
+                    "SET l.localiz_direccion = ?, l.localiz_ciudad_ID = ? " +
+                    "WHERE d.dpto_ID = ?";
+
+            try (PreparedStatement pstmt = con.prepareStatement(sql)) {
+
+                pstmt.setString(1, datos[1]);  // nueva dirección
+                pstmt.setInt(2, Integer.parseInt(datos[2])); // nuevo ID ciudad
+                pstmt.setInt(3, Integer.parseInt(datos[3])); // ID del departamento
+
+                int rows = pstmt.executeUpdate();
+                return rows > 0 ? "Dirección y ciudad actualizadas correctamente."
+                        : "No se encontró un departamento con ese ID.";
+
+            } catch (SQLException e) {
+                return "Error SQL: " + e.getMessage();
+            }
+        }
+
     }
 }
