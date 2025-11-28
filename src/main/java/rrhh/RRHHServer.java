@@ -6,7 +6,7 @@ import java.sql.*;
 
 public class RRHHServer {
 
-    private static final String DB_URL = "jdbc:mysql://localhost:3306/db_rh_poligran";
+    private static final String DB_URL = "jdbc:mysql://localhost:3306/db_rrhh_poligran";
     private static final String USER = "root";
     private static final String PASS = "1234";
     private static final int PORT = 5000;
